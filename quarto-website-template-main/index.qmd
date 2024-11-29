@@ -1,0 +1,32 @@
+---
+about:
+  template: jolla
+  id: about-block
+  image: "img/my_image.jpg"
+  links:
+    - icon: twitter
+      text: Twitter
+      href: https://x.com/_dizferre
+    - icon: github
+      text: Github
+      href: https://github.com/joseluisdizferre/mdt
+    - icon: linkedin
+      text: LinkedIn
+      href: https://www.linkedin.com/in/joseldizferre/
+    - icon: envelope
+      text: Email
+      href: "mailto:mail.joseluisdizferre@gmail.com"  
+---
+
+::: {#about-block}
+:::
+
+# Welcome
+
+My name is Jose and I am continuing my medical career in Cleveland, Ohio. I am a researcher at the Cleveland clinic and a student at the Master of Public Health at Case Western Reserve University.My research include heart failure and public health. I am focused on large-scale assessment of cardiac surgical outcomes from a public health perspective.
+
+On this website, you will find a selection of the work I am involved with. You will also find news and updates on my current projects, as well as information on upcoming events. I invite you to explore my website and learn more about my life's work as a scientist and entrepreneur. If I am not working, I enjoy playing tennis, listening to music and spending time with friends and family.
+
+Please feel free to [contact me](mailto:mail.joseluisdizferre@gmail.com) if you have any questions or would like to discuss potential projects.
+
+
