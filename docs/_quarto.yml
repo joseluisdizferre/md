@@ -1,0 +1,74 @@
+
+
+
+website:
+  title: "Jose"                                
+  description: "Scientist" 
+  image: img/my_image.jpg
+  
+  favicon: img/favicon.png
+  
+  # start of the navigation bar at the top of the website
+  navbar:
+    pinned: true
+    logo: /img/logo.png
+    
+    # your sub-pages
+    left:
+      - text: "Projects"
+        href: projects/index.qmd
+      - text: "CV"
+        href: cv/index.qmd
+      - text: "Blog"
+        href: blog/index.qmd
+      - text: "My first analysis"
+        href: my first analysis/index.qmd
+    
+    # your social media handles
+    right:
+      - icon: twitter
+        href: https://x.com/_dizferre
+      - icon: linkedin
+        href: https://www.linkedin.com/in/joseldizferre/
+      - icon: envelope
+        aria-label: email
+        href: "mailto:joseluisdizferre@gmail.com"  
+  
+  
+
+# Don't touch unless you know what you are doing :) ------------
+  search: 
+    location: navbar
+    type: textbox
+  page-footer: 
+    left: |
+   
+    center: |
+      
+      
+
+project:
+  type: website
+  output-dir: docs
+
+  preview: 
+    port: 22222
+    browser: true
+    watch-inputs: true
+    navigate: true
+
+execute:
+  freeze: true
+
+format:
+  html:
+    fontsize: 1.1em
+    theme: 
+      - pulse
+      - html/styles.scss
+    toc: false
+    code-link: true
+    anchor-sections: true
+    fig-cap-location: margin
+    reference-location: margin
+    footnotes-hover: true
