@@ -1,0 +1,16 @@
+---
+title: Blog
+---
+
+# Reflection on “How To Be A Modern Scientist” by Jeff Leek 3/25/2025
+
+The peer review process is a critical component of scientific publishing, ensuring that research is evaluated by experts before dissemination. In How to Be a Modern Scientist, Jeff Leek provides a practical perspective on how peer review functions and the responsibilities of reviewers. One of the key takeaways from his discussion is the importance of timeliness—reviewers should either complete a review promptly or decline the request to avoid delaying the publication process. This aligns with the broader goal of improving the efficiency of scientific communication.
+
+Another significant point in the book is the structure of a well-written review. Leek outlines that an effective review should contain a clear summary of the paper (motivation, methods, results) in the reviewer’s own words, a list of major issues that could affect the validity of the research, a list of minor issues that could improve clarity and presentation, and  a list of typos. This structured approach helps authors address concerns effectively while maintaining the integrity of the review process.
+
+Leek also warns against common pitfalls in peer review, such as overly harsh criticism or sarcasm, a recommendation of whether to accept or reject the paper, unnecessary demands for additional citations, and requests for experiments/simulations that are unnecessary to justify the main points in the
+paper. Instead, he advocates for constructive feedback that helps improve the paper rather than simply pointing out flaws. He emphasizes that a reviewer’s role is not to rewrite the paper but to assess whether the research question, methods, and conclusions are valid and well-supported.
+
+Additionally, the book discusses how scientists can get credit for their reviewing work. Platforms like Publons now allow reviewers to document their contributions. This can be particularly beneficial for early-career researchers who want to demonstrate engagement in the scientific community.
+
+Overall, How to Be a Modern Scientist presents peer review as a responsibility that scientists should approach with professionalism, efficiency, and fairness. Leek’s insights reinforce that while the system is not perfect, conscientious participation in peer review is essential for maintaining scientific integrity. His emphasis on transparency and efficiency in the process resonates with broader efforts to enhance scientific communication.

@@ -1,0 +1,918 @@
+---
+title: "Predicting Health Conditions in Adults over 50 with Family Structure"
+subtitle: "Systolic Blood Pressure and Diabetes"
+author: "Jose Diz Ferre and Reilly Burhanna"
+date: last-modified
+format: 
+  html:
+    toc: true
+    number-sections: true
+    code-fold: show
+    code-tools: true
+    code-overflow: wrap
+    embed-resources: true
+    date-format: iso
+    theme: spacelab
+---
+
+## R Packages and Setup {.unnumbered}
+
+```{r}
+#| message: false
+#| warning: false
+
+knitr::opts_chunk$set(comment = NA)
+library(haven)
+library(janitor) 
+library(naniar)
+library(knitr)
+library(dplyr)
+library(broom)
+library(car)
+library(caret)
+library(GGally)
+library(gt)
+library(gtsummary)
+library(mice)
+library(mosaic)
+library(patchwork)
+library(ROCR)
+library(rsample)
+library(rms)
+library(cutpointr) 
+library(glue)
+
+library(easystats)
+library(tidyverse)
+
+theme_set(theme_bw())
+```
+
+# Data Source
+
+The data used for this study includes publicly released information from the Health and Retirement Study in 2022. The information can be downloaded by signing up for a free account using the link provided below. The information is gathered through questionnaires of adults over 50 years old and is repeated every two years to track participants as they age. Due to the wide range of information covered in this data, it is collected through a mixture of in person visits, online surveys, and phone calls.
+
+Link: <https://hrsdata.isr.umich.edu/data-products/2022-hrs-core>
+
+The link provided above is also available in the resources below. Important sections within that webpage include the "Data Description" and "Codebook".
+
+# The Subjects
+
+The population of this study includes residents of the United States who were born in the year 1971 or earlier and were questioned on numerous topics from health to family every 2 years, originally starting in 1992. Individuals were selected randomly from different geographic regions every 6 years which makes up cohorts of generations as well.
+
+# Loading and Tidying the Data
+
+## Loading the Raw Data
+
+```{r}
+# <https://hrsdata.isr.umich.edu/data-products/2022-hrs-core>
+
+PhysMeasure_raw <- read_sas("C:/Users/dizferj/OneDrive - Cleveland Clinic/Documents/MPH/432/Data/h22core/h22sas/h22i_r.sas7bdat") |>
+  zap_label() |>
+  distinct(HHID, .keep_all = TRUE)
+
+PhysHealth_raw <- read_sas("C:/Users/dizferj/OneDrive - Cleveland Clinic/Documents/MPH/432/Data/h22core/h22sas/h22c_r.sas7bdat") |>
+  zap_label() |>
+  distinct(HHID, .keep_all = TRUE)
+
+FamStructH_raw <- read_sas("C:/Users/dizferj/OneDrive - Cleveland Clinic/Documents/MPH/432/Data/h22core/h22sas/h22e_h.sas7bdat") |>
+  zap_label() |>
+  distinct(HHID, .keep_all = TRUE)
+
+FamStructMC_raw <- read_sas("C:/Users/dizferj/OneDrive - Cleveland Clinic/Documents/MPH/432/Data/h22core/h22sas/h22e_mc.sas7bdat") |>
+  zap_label() |>
+  distinct(HHID, .keep_all = TRUE)
+
+Demographic_raw <- read_sas("C:/Users/dizferj/OneDrive - Cleveland Clinic/Documents/MPH/432/Data/h22core/h22sas/h22b_r.sas7bdat") |>
+  zap_label() |>
+  distinct(HHID, .keep_all = TRUE)
+```
+
+Original data sets had some duplicate rows, which we removed above.
+
+## Cleaning the Data
+
+### Selecting Variables
+
+```{r}
+PhysMeasure <- PhysMeasure_raw |>
+  select(HHID, SI859) |>
+  rename(sbp = SI859) |>
+  janitor::clean_names()
+
+PhysHealth <- PhysHealth_raw |>
+  select(HHID, SC010) |>
+  rename(diabetes  = SC010) |>
+  janitor::clean_names()
+
+FamStructH <- FamStructH_raw |>
+  select(HHID, SE022, SE046) |>
+  rename(new_gchild = SE022, num_gchild = SE046) |>
+  janitor::clean_names()
+
+FamStructMC <- FamStructMC_raw |>
+  select(HHID, SE044) |>
+  rename(num_child = SE044) |>
+  janitor::clean_names()
+
+Demographic <- Demographic_raw |>
+  select(HHID, SB063) |>
+  rename(marital = SB063) |>
+  janitor::clean_names()
+```
+
+### Cleaning Outcome Data
+
+```{r}
+PhysMeasure <- PhysMeasure |>
+  mutate(sbp = ifelse(sbp > 1 & sbp < 993, sbp, NA))
+
+PhysHealth <- PhysHealth |>
+  mutate(diabetes = ifelse(diabetes >= 1 & diabetes <= 6, diabetes, NA)) |>
+  mutate(diabetes = as.factor(diabetes)) |>
+  mutate(diabetes = diabetes |> 
+           fct_recode("Yes" = "1", "Yes" = "6", "No" = "4", "No" = "5"))
+```
+
+### Cleaning Predictor Data
+
+```{r}
+FamStructH <- FamStructH |>
+  mutate(new_gchild = ifelse(new_gchild >= 1 & new_gchild <= 8, new_gchild, NA), 
+         num_gchild = ifelse(num_gchild >= 0 & num_gchild <= 80, num_gchild, NA)) |>
+  mutate(new_gchild = as.factor(new_gchild)) |>
+  mutate(new_gchild = new_gchild |> 
+           fct_recode("Yes" = "1", "No" = "5", "No" = "8"))
+
+FamStructMC <- FamStructMC |>
+  mutate(num_child = ifelse(num_child >= 0 & num_child <= 20, num_child, NA))
+
+Demographic <- Demographic |>
+  mutate(marital = ifelse(marital >= 1 & marital <= 6, marital, NA)) |>
+  mutate(marital = as.factor(marital)) |>
+  mutate(marital = marital |> 
+           fct_recode("Married" = "1", "Seperated" = "2", "Seperated" = "3",
+                      "Seperated" = "4", "Widowed" = "5", "Never Married" = "6"))
+```
+
+### Combined Tibble
+
+```{r}
+temp1 <- full_join(Demographic, FamStructH, by = "hhid")
+temp2 <- full_join(temp1, FamStructMC, by = "hhid")
+temp3 <- full_join(temp2, PhysMeasure, by = "hhid")
+PhysTibble <- full_join(temp3, PhysHealth, by = "hhid")
+
+dim(PhysTibble)
+
+PhysTibble <- PhysTibble |> 
+  drop_na()
+
+dim(PhysTibble)
+
+set.seed(432)
+PhysTibble <- PhysTibble |>
+  slice_sample(n=2000)
+
+dim(PhysTibble)
+```
+
+As it can be seen above, we were able to filter for complete cases across all variables with more than enough samples left over. We then sampled the complete cases tibble for 2000 cases to meet the specifications. Originally we made two separate tibbles for our Linear and Logistic Regression. Although this would work, we have more than enough complete cases to study the the same sample of people for both models. This might be interesting considering both models use the same inputs to predict a physical health outcome, so we decided on a combined tibble containing both outcomes.
+
+# The Tidy Tibble
+
+## Listing the Tibble
+
+```{r}
+PhysTibble
+```
+
+## Size and Identifiers
+
+```{r}
+dim(PhysTibble)
+
+n_distinct(PhysTibble$hhid)
+
+class(PhysTibble$hhid)
+```
+
+Our final tibble has 2000 samples with 7 variables: an identifier, four predictors, and two outcomes. The identifier is defined as a character in R and is named hhid. It has 2000 distinct values which matches the sample size of our final tibble. 
+
+## Save The Tibble
+
+```{r}
+write_rds(PhysTibble, file = "PhysTibble_reillyJose.Rds")
+```
+
+# The Code Book
+
+## Defining the Variables
+
+Variable | Role | Type | Description
+:------: | :----: | :----: | :---------------:
+`hhid` | Identifier | - | character code for respondents
+`marital` | Input | 4-cat | Marital Status (Married, Separated, Widowed, Never Married)
+`new_gchild` | Input | 2-cat | Any new grandchildren in past 2 years (Yes/No)
+`num_gchild` | Input | quant | Number of grandchildren of respondent
+`num_child` | Input | quant | Number of children of respondent
+`sbp` | Outcome (linear) | quant | Measured Systolic Blood Pressure (mmHg)
+`diabetes` | Outcome (logistic) | 2-cat | Have or had Diabetes or High Blood Pressure (Yes/No)
+
+## Numerical Description
+
+```{r}
+data_codebook(PhysTibble, max_values = 3)
+```
+
+# Linear Regression Plans
+
+## My First Research Question
+
+Does an increased presence of children and grandchildren directly affect a person's Systolic Blood Pressure while accounting for marital status?
+
+## My Quantitative Outcome
+
+Our quantitative outcome is named `sbp` in our final tibble. We are interested in this variable since adults over 50 have an increased risk of high Systolic Blood Pressure (SBP). We were interested in seeing if family structure data, such as marital status and the number direct descendants of a person, result in lower SBP measurements for survey respondents. All rows of our final tibble contain complete data on `sbp`.
+
+```{r}
+n_distinct(PhysTibble$sbp)
+
+bw = 2 
+plot1 <- ggplot(PhysTibble, aes(x = sbp)) +                     
+  geom_histogram(binwidth = bw, fill = "black", col = "white") + 
+  stat_function(fun = function(x)                               
+    dnorm(x, mean = mean(PhysTibble$sbp, na.rm = TRUE),         
+          sd = sd(PhysTibble$sbp, na.rm = TRUE)) * 
+          length(PhysTibble$sbp) * bw,
+    geom = "area", alpha = 0.5, 
+    fill = "lightblue", col = "blue") +                         
+  labs(x = "Systolic Blood Pressure (SBP)", y = "Count")
+
+plot2 <- ggplot(PhysTibble, aes(sample = sbp)) +
+  geom_qq(color = "black") +
+  geom_qq_line(color = "blue") +
+  theme_minimal() +
+  theme(panel.grid = element_blank()) +
+  labs(x = "Theoretical Quantiles", y = "Sample Quantiles")
+
+plot1 + plot2 +
+  plot_annotation(title = "Simple Visualizations of Distribution of Systolic Blood Presure",
+                  subtitle = "Histogram and Q-Q Plot")
+```
+
+The plot above shows the distribution of sbp measurements in this sample is relatively symmetric and therefore almost continuous. The fitted normal curve models the distribution well suggesting a transform is most likely not necessary. Using the "n_distinct" function it can be seen that `sbp` has 120 different values which meets the specifications. 
+
+```{r}
+describe(PhysTibble$sbp)
+
+favstats(PhysTibble$sbp) |> gt()
+
+PhysTibble |>
+  tabyl(sbp) |>
+  adorn_pct_formatting() |> 
+  arrange(desc(n)) |>
+  head(5) |>
+  gt()
+```
+
+The tables above show that sbp has a mean of around 130 mmHg, which is close to the highest percentage instance of sbp. This value makes up 2.9% of the outcome data for these 2000 samples which is below the 10% threshold.
+
+## My Planned Predictors (Linear Model)
+
+```{r}
+n_distinct(PhysTibble$num_gchild)
+n_distinct(PhysTibble$num_child)
+
+summary_table <- PhysTibble |> 
+  select(new_gchild, marital) |> 
+  map_df(~ tabyl(.) |> adorn_totals("row"), .id = "Variable") 
+
+summary_table |> 
+  gt() |> 
+  tab_header(title = "Summary of Categorical Variables") |> 
+  fmt_number(columns = c("percent"), decimals = 3) |> 
+  cols_label(n = "Count", percent = "Percent")
+```
+
+We have four predictors total as shown in the codebook above. The two that are quantitative are `num_gchild` and `num_child` with 34 and 13 distinct values respectively. Our categorical variables are `new_gchild`, which is binary, and `marital` which is four levels. The table above shows greater than 30 observations for each variable. Our outcome `sbp` has no missing data and therefore the candidate predictors must not be any bigger than 4 + (2000-100)/100 = 23. With only four predictors, we are well below this threshold.
+
+### Model Expectations
+
+We expect to see lower Systolic Blood Pressure (SBP) Levels in those with more grandchildren and those who recently had grand children. For direct children we expect to see a similar outcome as to grandchildren, but possibly not as strong. We also believe there might be an association between SBP and the marital status of a person, while expecting a difference between those who are married and those who are separated.
+
+### Missingness Summary
+
+```{r}
+miss_var_summary(PhysTibble)
+miss_case_table(PhysTibble)
+```
+
+From the summaries above it can be seen that we have absolutely no missing data. This is explained above in the data cleaning section.
+
+# Logistic Regression Plans
+
+## My Second Research Question
+
+Is there an increased risk for diabetes in those with either less children or grandchildren and how does this change when factoring in a person's current marital status?
+
+## My Binary Outcome
+
+```{r}
+PhysTibble |> tabyl(diabetes)
+```
+
+Our binary outcome is called `diabetes` which is a yes or no answer to whether the person aged over 50 has had diabetes in their life. The table above shows that almost one third of the sample has answered yes.
+
+## My Planned Predictors (Logistic Model)
+
+The predictors here are the same as listed in the linear model section: `num_gchild`, `num_child`, `new_gchild`, and `marital`. N2 would be 661 since the "Yes" group is smaller. This means our model can have no more than 4+(661-100)/100 = 9 predictors, which is well beyond the planned count of four predictors for this analysis.
+
+### Model Expectations
+
+We expect to see a positive association between those with more grandchildren and children and not having diabetes. We do not have a good guess for the association between marital status and diabetes, but we do assume that the results might align with our Linear Model's association with Systolic Blood Pressure. Children and grandchildren can take time out of a person's life, so it will be interesting to see if that time spent is positively associated with better health.
+
+### Anticipated Direction of Effects
+
+I expect higher blood pressure risk to be associated with widowed status, with no new grand children, a lower number of children or grand children.
+
+### Missingness Summary
+
+```{r}
+miss_var_summary(PhysTibble)
+miss_case_table(PhysTibble)
+```
+
+From the summaries above it can be seen that we have absolutely no missing data. This is explained above in the data cleaning section where we chose working with complete cases.
+
+- We have complete data for all of the logistic model predictors in 2000 (100%) of the 2000 rows in my data.
+- We are missing XX values (XX%) for (insert variable name here) (optional with imputation)
+
+# Linear Regression Analyses
+
+Follow the Project A instructions.
+
+## Missingness
+
+We will work with complete cases since missing data was dropped in the data cleaning section.
+
+```{r}
+miss_var_summary(PhysTibble)
+```
+
+### Single Imputation Approach (optional)
+
+
+PhysTibble_i <- 
+  mice(PhysTibble, m = 1, seed = 432432, print = FALSE) |>
+  complete() |>
+  tibble()
+
+n_miss(PhysTibble_i)
+
+
+## Outcome Transformation
+
+```{r}
+mod_temp <- lm(sbp ~ num_gchild + new_gchild + marital + num_child, data = PhysTibble)
+
+boxCox(mod_temp)
+
+PhysTibble <- PhysTibble |>
+  mutate(logsbp = log(sbp))
+
+p1 <- ggplot(PhysTibble, aes(sample = logsbp)) +
+  geom_qq(col = "navy") + geom_qq_line(col = "red") + 
+  labs(title = "Normal Q-Q plot of log(sbp)", x = "",
+       y = "Log of SBP Cholesterol Level (mmHg)")
+
+p2 <- ggplot(PhysTibble, aes(x = logsbp)) +
+  geom_histogram(bins = 20, col = "white", fill = "navy") +
+  labs(title = "Histogram of log(sbp)", x = "Log of SBP Cholesterol Level (mmHg)")
+
+p1 + p2
+```
+
+
+## Scatterplot Matrix and Collinearity
+
+```{r}
+ggpairs(PhysTibble, columns = c("num_gchild", "new_gchild", "marital", 
+                               "num_child"))
+
+mod_A <- lm(sbp ~ num_gchild + new_gchild + marital + num_child, data = PhysTibble)
+
+car::vif(mod_A)
+```
+
+
+## Model A
+
+### Fitting Model A
+
+```{r}
+mod_A <- lm(logsbp ~ num_gchild + new_gchild + marital + num_child, data = PhysTibble)
+
+dd <- datadist(PhysTibble)
+options(datadist = "dd")
+
+mod_A_ols <- ols(logsbp ~ num_gchild + new_gchild + marital + num_child,
+                 data = PhysTibble, x = TRUE, y = TRUE)
+```
+
+
+### Tidied Coefficient Estimates (Model A)
+
+```{r}
+model_parameters(mod_A, ci = 0.90) |> print_md(digits = 3)
+```
+
+
+### Summarizing Fit (Model A)
+
+```{r}
+plot(summary(mod_A_ols, conf.int = 0.90))
+
+summary(mod_A_ols, conf.int = 0.90) |> kable(digits = 3)
+
+model_performance(mod_A) |> print_md(digits = 3)
+
+glance(mod_A) |>
+  select(r2 = r.squared, adjr2 = adj.r.squared, sigma, 
+         AIC, BIC, nobs, df, df.residual) |>
+  kable(digits = c(3, 3, 2, 1, 1, 0, 0, 0))
+```
+
+
+### Regression Diagnostics (Model A)
+
+For the most part, these plots look very reasonable. I see no clear problems with the assumptions of linearity, normality or constant variance evident in any of these results.
+
+The main issue is the posterior predictive check, where our predictions are missing on the left part of the center of the distribution, with more predicted values of log(HDL) in the 112.5 to 125 range than we see in the original data.
+
+```{r}
+#| fig-height: 8
+
+check_model(mod_A, detrend = FALSE)
+```
+
+## Non-Linearity
+
+Here’s the relevant Spearman 
+ plot, as a place to look for sensible places to consider a non-linear term or terms.
+
+```{r}
+plot(spearman2(logsbp ~ num_gchild + new_gchild + marital + num_child, data = PhysTibble))
+```
+Our Spearman plot first suggests the use of a non-linear term in new_gchild, so we’ll add a restricted cubic spline in new_gchild using 5 knots, which should add 3 degrees of freedom to our initial model.
+
+Next, the num_gchild variable also seems to be a good choice, so we’ll add an interaction between num_gchild and the main effect of new_gchild, which will add one more degree of freedom to our model A.
+
+## Model B
+
+Our Model B will add two non-linear terms, summing up to 4 additional degrees of freedom, to our model A.
+
+### Fitting Model B
+
+We’ll also fit model B with the ols() function from the rms package.
+
+```{r}
+mod_B <- lm(logsbp ~ rcs(num_gchild, 5) + new_gchild + num_gchild %ia% new_gchild + marital, data = PhysTibble)
+
+dd <- datadist(PhysTibble)
+options(datadist = "dd")
+
+mod_B_ols <- ols(logsbp ~ rcs(num_gchild, 5) + new_gchild + num_gchild %ia% new_gchild + marital,
+            data = PhysTibble, x = TRUE, y = TRUE)
+```
+
+
+### Tidied Coefficient Estimates (Model B)
+
+```{r}
+tidy(mod_B, conf.int = TRUE, conf.level = 0.90) |>
+  select(term, estimate, se = std.error, 
+         low90 = conf.low, high90 = conf.high, 
+         p = p.value) |>
+  kable(digits = 3)
+```
+
+
+### Effects Plot for Model B
+
+Here, we use the mod_B_ols model to look at the effects using its plot and associated table, which may be especially helpful when we include non-linear terms.
+
+```{r}
+plot(summary(mod_B_ols, conf.int = 0.90))
+
+summary(mod_B_ols, conf.int = 0.90) |> kable(digits = 3)
+```
+
+
+### Summarizing Fit (Model B)
+
+```{r}
+glance(mod_B) |>
+  select(r2 = r.squared, adjr2 = adj.r.squared, sigma, 
+         AIC, BIC, nobs, df, df.residual) |>
+  kable(digits = c(3, 3, 2, 1, 1, 0, 0, 0))
+```
+
+
+### Regression Diagnostics (Model B)
+
+These residual plots look reasonable. I see no clear problems with the assumptions of normality or constant variance evident in these results. Slight issues with linearity and heteroskedasticity are present on the left parts of the graphs. The posterior predictive check seems simital to Model A. The collinearity we’ve introduced here is due to the interaction terms, so that’s not a concern for us.
+
+```{r}
+check_model(mod_B, detrend = FALSE)
+```
+
+
+## Validating Models A and B
+
+```{r}
+set.seed(4321); (valA <- validate(mod_A_ols))
+
+set.seed(4322); (valB <- validate(mod_B_ols))
+```
+
+
+### Validated $R^2$ statistics, and MSE as well as IC statistics
+
+C = 0.5 + Dxy/2
+
+Model | Validated $R^2$ | validated MSR | AIC | BIC | df
+-----: | -------- | -------- | -------- | -------- | --------
+A |  0.0008 |  0.0241 | -1762.2	| -1717.4	 | 6
+B | -0.0016 | 0.024 | -1758.6 |	-1697 | 9
+
+## Final Linear Regression Model
+
+We’ll choose Model A here.
+
+We see worse numbers for Model B in terms of validated and validated MSR. Model A matches the assumptions of linear regression better. Given the negative R2 value of model b, we will definitly pick model a.
+
+### Winning Model's Parameter Estimates
+
+```{r}
+mod_A_ols
+```
+
+
+### Effects Plot for Winning Model
+
+```{r}
+plot(summary(mod_A_ols, conf.int = 0.90))
+```
+
+
+### Numerical Description of Effect Sizes
+
+```{r}
+summary(mod_A_ols, conf.int = 0.90) |> kable(digits = 3)
+```
+
+
+New grandchildren description: If we have two subjects of the same marital status, number of grandchildren and number of children, then if subject 1 does not have a new grandchildren and subject 2 does have a newgrand children, then our model estimates that subject 1 will have a log(sbp) that is 0.023 higher than subject 2 on average. The 90% confidence interval around that estimated effect on log(sbp) ranges from (0.0091, 0.038).
+
+
+### Nomogram of Winning Model
+
+```{r}
+ggplot(Predict(mod_A_ols))
+
+plot(nomogram(mod_A_ols, fun = exp, funlabel = "SBP"))
+```
+
+
+### Prediction for a New Subject
+
+Here, I’ll actually run two predictions, one for a subject with (1) and without (2) new_gchild with the same values of num_child (2), num_gchild (5) and marital status (widowed).
+
+```{r}
+new_subjects <- data.frame(num_child = c(2, 2), num_gchild = c(5, 5),
+             marital = c("Widowed", "Widowed"), new_gchild = c("Yes", "No"))
+
+preds1 <- predict.lm(mod_A, newdata = new_subjects, 
+                     interval = "prediction", level = 0.90)
+
+exp(preds1)
+```
+
+
+# Logistic Regression Analyses
+
+## Missingness
+
+
+
+As explained in the data cleaning and 8.1.1 sections, we will work with complete cases and no missing data.
+
+- We have complete data for all of the logistic model predictors in 2000 (100%) of the 2000 rows in my data.
+
+Again, we’ll assume missing values are MAR, and use the single imputation approach developed previously in Section 8.1.1. (optional)
+- We are missing XX values (XX%) for insert (variable name here). (optional with imputation)
+
+## Model Y
+
+We’ll predict Pr(diabetes = 1), the probability of having a low enough risk of diabetes to put the subject at risk, as a function of num_gchild, new_gchild, marital, and num_child.
+
+### Fitting Model Y
+
+```{r}
+mod_Y <- glm(diabetes ~ num_gchild + new_gchild + marital + num_child,
+            data = PhysTibble, family = binomial())
+
+ddd <- datadist(PhysTibble)
+options(datadist = "ddd")
+
+mod_Y_lrm <- lrm(diabetes == "Yes" ~ num_gchild + new_gchild + marital + num_child,
+                data = PhysTibble, x = TRUE, y = TRUE)
+```
+
+
+### Tidied Odds Ratio Estimates (Model Y)
+
+```{r}
+tidy(mod_Y, exponentiate = TRUE, conf.int = TRUE, conf.level = 0.90) |>
+  select(term, estimate, se = std.error, 
+         low90 = conf.low, high90 = conf.high, p = p.value) |>
+  kable(digits = 3)
+```
+
+
+### Effects Plot (Model Y)
+
+```{r}
+plot(summary(mod_Y_lrm, conf.int = 0.90))
+```
+
+
+### Summarizing Fit (Model Y)
+
+```{r}
+summary(mod_Y_lrm, conf.int = 0.90) |> kable(digits = 3)
+
+mod_Y_lrm
+
+glance(mod_Y) |>
+  mutate(df = nobs - df.residual - 1) |>
+  select(AIC, BIC, df, df.residual, nobs) |>
+  kable(digits = 1)
+```
+
+Our Nagelkerke R2 estimate for Model Y is 0.016, and our C statistic is estimated to be 0.571            
+
+### Confusion Matrix (Model Y)
+
+My prediction rule for this confusion matrix is that the fitted value of Pr(diabetes = 1) needs to be greater than or equal to 0.65 for me to predict diabetes is 1, and otherwise I predict 0.
+
+```{r}
+resY_aug <- augment(mod_Y, type.predict = "response")
+
+cp1 <- cutpointr(data = resY_aug, .fitted, diabetes,  
+                 pos_class = "Yes", neg_class = "No", 
+                 method = maximize_metric, metric = sum_sens_spec) 
+
+ 
+
+cp1 |> select(direction, optimal_cutpoint, method, sum_sens_spec) |>  
+  gt() |> tab_options(table.font.size = 24) |>  
+  opt_stylize(style = 2, color = "pink") 
+
+
+
+cm_Y <- caret::confusionMatrix(
+  data = factor(resY_aug$.fitted >= cp1$optimal_cutpoint),
+  reference = factor(resY_aug$diabetes == "Yes"),
+  positive = "TRUE")
+
+cm_Y
+```
+
+
+My prediction rule is ...
+
+Here are our results, tabulated nicely.
+
+Model	Classification Rule	Sensitivity	Specificity	Pos. Pred. Value
+Y	Predicted Pr(diabetes = 1) >= 0.65 0.670	0.208	0.294
+
+
+## Non-Linearity
+
+```{r}
+plot(spearman2(diabetes == "Yes" ~ num_gchild + new_gchild + marital + num_child,
+            data = PhysTibble))
+```
+Our Spearman p2 plot suggests the use of a non-linear term in num_gchild, so we’ll add a restricted cubic spline in num_gchild using 4 knots, which should add 2 degrees of freedom to our initial model.
+
+Next, the num_child variable seems to be a good choice, so we’ll add an interaction between num_child and the main effect of num_gchild, which will add one more degrees of freedom to our model Y.
+
+## Model Z
+
+As mentioned, our model Z will add 3 degrees of freedom through two non-linear terms, to model Y.
+
+### Fitting Model Z
+
+```{r}
+mod_Z <- glm(diabetes ~ num_child + rcs(num_gchild, 4) + new_gchild + 
+                num_gchild %ia% num_child + marital,
+            data = PhysTibble, family = binomial())
+
+ddd <- datadist(PhysTibble)
+options(datadist = "ddd")
+
+mod_Z_lrm <- lrm(diabetes == "Yes" ~ num_child + rcs(num_gchild, 4) + new_gchild + 
+                num_gchild %ia% num_child + marital,
+                 data = PhysTibble, x = TRUE, y = TRUE)
+```
+
+### Tidied Odds Ratio Estimates (Model Z)
+
+```{r}
+tidy(mod_Z, exponentiate = TRUE, conf.int = TRUE, conf.level = 0.90) |>
+  select(term, estimate, se = std.error, 
+         low90 = conf.low, high90 = conf.high, p = p.value) |>
+  kable(digits = 3)
+```
+
+
+### Effects Plot (Model Z)
+
+```{r}
+plot(summary(mod_Z_lrm, conf.int = 0.90))
+```
+
+
+### Summarizing Fit (Model Z)
+
+```{r}
+summary(mod_Z_lrm, conf.int = 0.90) |> kable(digits = 3)
+
+mod_Z_lrm
+
+glance(mod_Z) |>
+  mutate(df = nobs - df.residual - 1) |>
+  select(AIC, BIC, df, df.residual, nobs) |>
+  kable(digits = 1)
+```
+
+
+### Confusion Matrix (Model Z)
+
+As in Model Y, my prediction rule for this confusion matrix is that the fitted value of Pr(diabetes = 1) needs to be greater than or equal to 0.65 for me to predict diabetes is 1, and otherwise I predict 0.
+
+Again, we augment our PhyTibble data to include predicted probabilities of (diabetes = 1) from Model Z.
+
+```{r}
+resZ_aug <- augment(mod_Z, type.predict = "response")
+
+cm_Z <- caret::confusionMatrix(
+  data = factor(resZ_aug$.fitted >= 0.65),
+  reference = factor(resZ_aug$diabetes == "Yes"),
+  positive = "TRUE")
+
+cm_Z
+```
+
+Here are our results comparing classification performance by models Y and Z.
+
+Model	Classification Rule	Sensitivity	Specificity	Pos. Pred. Value
+Y	Predicted Pr(HDL_RISK = 1) >= 0.65	0.670	0.208	0.294
+Z	Predicted Pr(HDL_RISK = 1) >= 0.65	0.611	0.279	0.295
+
+## Validating Models Y and Z
+
+We will use the validate() function from the rms package to validate our lrm fits.
+
+```{r}
+set.seed(4323); (valY <- validate(mod_Y_lrm))
+
+set.seed(4324); (valZ <- validate(mod_Z_lrm))
+```
+
+
+### Validated Nagelkerke $R^2$ and $C$ statistics for each model
+
+C = 0.5 + Dxy/2
+
+Model	Validated R2 Validated C	AIC	BIC	df
+Y	     0.0085	      0.5572	   2529.7	2568.9	6	
+Z	     0.0074	      0.5521	   2529.4	2585.4	9	
+
+
+
+## Final Logistic Regression Model
+
+I prefer Model Y, because of its slightly better validated R2, and validated C statistic, despite the fact that Model Z has a slightly lower AIC and BIC and that Model Z also has a slightly higher positive predictive value. It’s pretty close, though.
+
+### Winning Model's Parameter Estimates
+
+```{r}
+mod_Y_lrm
+```
+
+
+### Plot of Effect Sizes for Winning Model
+
+```{r}
+plot(summary(mod_Y_lrm, conf.int = 0.90))
+```
+
+
+### Numerical Description of Effect Sizes
+
+```{r}
+summary(mod_Y_lrm, conf.int = 0.90) |> kable(digits = 3)
+```
+
+
+Number of grandchildren description: If we have two subjects of the same marital status, number of children and new grandchildren status, but a subject 1 has a number of grandchildren of 3 and subject 2 number of grandchildren of 8, then our model estimates that subject 2 will have 1.194 times the odds (90% CI: 1.098,	1.299	) that subject 1 has of being at risk of diabetes.
+
+
+### Plot of ROC Curve for Winning Model
+
+
+ performance_roc(mod_Y) 
+
+plot(performance_roc(mod_Y)) + 
+  labs(title = glue("Model mod_Y: C statistic = ",
+  round_half_up(as.numeric(performance_roc(mod_Y)),3)))
+  
+
+### Validated $R^2$ and $C$ statistic for Winning Model
+
+As we saw in Section 9.5.1,
+
+the validated R2 statistic for Model Y is  0.0085, and	      
+the validated C statistic for Model Y is 0.5572.
+
+
+### Nomogram of Winning Model
+
+
+```{r}
+plot(nomogram(mod_Y_lrm, fun = plogis, 
+              funlabel = "Pr(diabetes = 1)"))
+```
+
+### Predictions for Two New Subjects
+
+I will create a predicted Pr(diabetes = 1) for two subjects with the same values of num_child (2), new_gchild (Yes) and marital status (Widowed). The first will have a num_gchild of 3, and the second will have a num_gchild of 8.
+
+```{r}
+new_subjects <- data.frame(num_child = c(3, 8), num_gchild = c(5, 5),
+             marital = c("Widowed", "Widowed"), new_gchild = c("Yes", "Yes"))
+
+preds2 <- predict.lm(mod_Y, newdata = new_subjects, 
+                     interval = "prediction", level = 0.90)
+
+exp(preds2)
+```
+
+
+# Discusssion
+
+## Answering My Research Questions 
+
+### Question 1 (with Answer)
+Does an increased presence of children and grandchildren directly affect a person’s Systolic Blood Pressure while accounting for marital status?
+
+
+According to model A, having a new grandchildren increases the log(sbp) by 0.023 on average when accounting for marital status, number of grandchildren and number of children with a 90% confidence interval around that estimated effect on log(sbp) ranging from (0.0091, 0.038).
+
+
+### Question 2 (with Answer)
+Is there an increased risk for diabetes in those with either less children or grandchildren and how does this change when factoring in a person’s current marital status?
+
+According to model Y, the estimated odds ratio of having diabetes is 0.97 for every increased number of grandchildren when adjusting for marital status, number of children and new grandchildren status with a 90% CI 0.95, 0.98.
+
+## Thoughts on Project A
+
+
+### Question 2
+What do you wish you’d known at the start of this process that you know now, and why?
+
+We wish we knew that we would encounter lots of challenging during the review process of the portfolio because we would have designated more time in improving the details of the analysis. 
+
+### Question 4
+What was the most useful thing you learned while doing the project, and why?
+
+The most useful thing for us was to being able to use a database not seen during class because it allowed us to have a sense of what it is actually like to approach a public data set for a research question analysis without previous experience.
+
+# Affirmation
+
+I am certain that it is completely appropriate for these data to be shared with anyone, without any conditions. There are no concerns about privacy or security.
+
+# References
+
+1. The Health and Retirement Study (HRS) takes bi-yearly data from people of ages 50 and older which is a longitudinal study supported by the University of Michigan. The intent of the wide range of data it collects is to offer data for multidisciplinary research in the the context of aging.
+2. <https://hrsdata.isr.umich.edu/data-products/2022-hrs-core>
+3. <https://www.nia.nih.gov/research/resource/health-and-retirement-study-hrs>
+
+# Session Information
+
+```{r}
+xfun::session_info()
+```
