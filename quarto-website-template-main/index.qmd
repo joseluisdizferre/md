@@ -15,7 +15,7 @@ about:
       href: https://www.linkedin.com/in/joseldizferre/
     - icon: envelope
       text: Email
-      href: "mailto:mail.joseluisdizferre@gmail.com"  
+      href: "mailto:mail.dizferj@ccf.org"  
 ---
 
 ::: {#about-block}
@@ -27,6 +27,6 @@ My name is Jose and I am continuing my medical career in Cleveland, Ohio. I am a
 
 On this website, you will find a selection of the work I am involved with. You will also find news and updates on my current projects, as well as information on upcoming events. I invite you to explore my website and learn more about my life's work as a scientist and entrepreneur. If I am not working, I enjoy playing tennis, listening to music and spending time with friends and family.
 
-Please feel free to [contact me](mailto:mail.joseluisdizferre@gmail.com) if you have any questions or would like to discuss potential projects.
+Please feel free to [contact me](mailto:mail.dizferj@ccf.org) if you have any questions or would like to discuss potential projects.
 
 
